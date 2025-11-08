@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ECR Repository stack for storing Soundflow container images"
+
+Resources:
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: soundflow-web
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: INMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+
+Outputs:
+  RepositoryName:
+    Description: ECR Repository Name
+    Value: !Ref Repository
+    Export:
+      Name: SoundflowRepositoryName
+
+  RepositoryUri:
+    Description: URI to reference the repository when tagging images
+    Value: !GetAtt Repository.RepositoryUri
+    Export:
+      Name: SoundflowRepositoryUri
+
+  RepositoryArn:
+    Description: ARN of the ECR Repository
+    Value: !GetAtt Repository.Arn
+    Export:
+      Name: SoundflowRepositoryArn
