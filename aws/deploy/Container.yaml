@@ -1,59 +1,68 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "ECS Service Soundflow web application"
+Description: "ECS Service Soundflow web application with Load Balancer"
 
 Parameters:
-  PublicSubnet:
-    Type: String
-    Description: ID of the public subnet from Network stack
+  VPCId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet::Id
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup::Id
   ContainerSG:
-    Type: String
-    Description: Security Group ID for the ECS container
-
+    Type: AWS::EC2::SecurityGroup::Id
 
 Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: Soundflow-cluster
-      Configuration:
-        ExecuteCommandConfiguration:
-          Logging: DEFAULT
-      Tags:
-        - Key: Name
-          Value: Soundflow-cluster
 
   LogGroup:
-    Type: AWS::ECS::LogGroup
+    Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /ecs/Soundflow-service
-      RetentionInDays: 30
 
   ExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
               Service: ecs-tasks.amazonaws.com
-            Action: "sts:AssumeRole"
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-      Path: /
 
-  TaskRole:
-    Type: AWS::IAM::Role
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: "sts:AssumeRole"
-      Path: /
-  
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref LoadBalancerSG
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPCId
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -64,16 +73,21 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ExecutionRole.Arn
-      TaskRoleArn: !GetAtt TaskRole.Arn
       ContainerDefinitions:
-          - Name: soundflow-container
-            Image: !Join [ ":", [ !ImportValue SoundflowRepositoryUri, "latest" ] ]
-            PortMappings:
-              - ContainerPort: 3000
-            Essential: true
+        - Name: soundflow-container
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/soundflow-web:latest"
+          PortMappings:
+            - ContainerPort: 3000
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: soundflow
 
   ECSService:
     Type: AWS::ECS::Service
+    DependsOn: Listener
     Properties:
       Cluster: !Ref ECSCluster
       DesiredCount: 1
@@ -83,6 +97,15 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           Subnets:
-            - !Ref PublicSubnet
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
           SecurityGroups:
             - !Ref ContainerSG
+      LoadBalancers:
+        - ContainerName: soundflow-container
+          ContainerPort: 3000
+          TargetGroupArn: !Ref TargetGroup
+
+Outputs:
+  URL:
+    Value: !Sub "http://${LoadBalancer.DNSName}"

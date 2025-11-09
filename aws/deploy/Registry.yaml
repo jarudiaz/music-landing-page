@@ -8,7 +8,7 @@ Resources:
       RepositoryName: soundflow-web
       ImageScanningConfiguration:
         ScanOnPush: true
-      ImageTagMutability: INMUTABLE
+      ImageTagMutability: IMMUTABLE
       EncryptionConfiguration:
         EncryptionType: AES256
 

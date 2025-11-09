@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Minimal network infrastructure for the Soundflow web application"
+Description: "Network infrastructure for the Soundflow web application with Load Balancer support"
 
 Resources:
   VPC:
@@ -32,6 +32,20 @@ Resources:
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: !Select [0, !GetAZs '']
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Soundflow-public-subnet-1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Soundflow-public-subnet-2
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -55,6 +69,12 @@ Resources:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
+  RouteAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
   PublicAccessSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -66,6 +86,20 @@ Resources:
           ToPort: 80
           CidrIp: 0.0.0.0/0
 
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic to Load Balancer
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Soundflow-lb-sg
+
   ContainerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -75,14 +109,35 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
-          SourceSecurityGroupId: !Ref PublicAccessSG
+          SourceSecurityGroupId: !Ref LoadBalancerSG
+      Tags:
+        - Key: Name
+          Value: Soundflow-container-sg
   
 Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: SoundflowVPCId
+
   PublicSubnetId:
-    Description: ID of the public subnet
+    Description: ID of the first public subnet
     Value: !Ref PublicSubnet
     Export:
       Name: SoundflowPublicSubnetId
+
+  PublicSubnet2Id:
+    Description: ID of the second public subnet
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: SoundflowPublicSubnet2Id
+
+  LoadBalancerSecurityGroupId:
+    Description: ID of the Load Balancer security group
+    Value: !Ref LoadBalancerSG
+    Export:
+      Name: SoundflowLoadBalancerSecurityGroupId
 
   ContainerSecurityGroupId:
     Description: ID of the container security group
