@@ -1,6 +1,15 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "ECS Service Soundflow web application"
 
+Parameters:
+  PublicSubnet:
+    Type: String
+    Description: ID of the public subnet from Network stack
+  ContainerSG:
+    Type: String
+    Description: Security Group ID for the ECS container
+
+
 Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
@@ -44,3 +53,36 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: "sts:AssumeRole"
       Path: /
+  
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: soundflow-task
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+          - Name: soundflow-container
+            Image: !Join [ ":", [ !ImportValue SoundflowRepositoryUri, "latest" ] ]
+            PortMappings:
+              - ContainerPort: 3000
+            Essential: true
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 1
+      LaunchType: FARGATE
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicSubnet
+          SecurityGroups:
+            - !Ref ContainerSG

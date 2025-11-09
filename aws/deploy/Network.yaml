@@ -8,9 +8,16 @@ Resources:
       CidrBlock: 10.0.0.0/16
       EnableDnsHostnames: true
       EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: Soundflow-vpc
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Soundflow-igw
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -30,6 +37,9 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Soundflow-public-rt
 
   PublicDefaultRoute:
     Type: AWS::EC2::Route
@@ -45,7 +55,7 @@ Resources:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
-  LoadBalancerSG:
+  PublicAccessSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow HTTP traffic from the internet
@@ -59,10 +69,23 @@ Resources:
   ContainerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow traffic from Load Balancer to app
+      GroupDescription: Allow inbound traffic to the app (port 3000)
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
-          SourceSecurityGroupId: !Ref LoadBalancerSG
+          SourceSecurityGroupId: !Ref PublicAccessSG
+  
+Outputs:
+  PublicSubnetId:
+    Description: ID of the public subnet
+    Value: !Ref PublicSubnet
+    Export:
+      Name: SoundflowPublicSubnetId
+
+  ContainerSecurityGroupId:
+    Description: ID of the container security group
+    Value: !Ref ContainerSG
+    Export:
+      Name: SoundflowContainerSecurityGroupId
